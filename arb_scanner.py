@@ -54,13 +54,12 @@ def get_polymarket():
 
 def get_kalshi():
     try:
-       
-r = requests.get(
-    "https://trading-api.kalshi.com/trade-api/v2/markets", 
-    params={"status": "open", "limit": 500},
-    timeout=15
-)
-
+        r = requests.get(
+            "https://api.elections.kalshi.com/trade-api/v2/markets",
+            params={"status": "open", "limit": 500},
+            headers={"accept": "application/json"},
+            timeout=15
+        )
         result = []
         for m in r.json().get("markets", []):
             ya     = m.get("yes_ask")
@@ -68,11 +67,11 @@ r = requests.get(
             ticker = m.get("ticker", "")
             title  = m.get("title", "")
 
-            # escludi solo i multi‑leg / cross‑category che davano falsi positivi
+            # Escludi solo i multi-leg nel ticker
             if "KXMVECROSSCATEGORY" in ticker:
                 continue
 
-            # prezzi validi anche molto piccoli
+            # Prezzi validi anche piccoli
             if ya is not None and na is not None and ya > 0 and na > 0:
                 result.append({
                     "source":  "kalshi",
@@ -82,11 +81,12 @@ r = requests.get(
                     "no":      na / 100,
                     "url":     f"https://kalshi.com/events/{m.get('event_ticker', ticker)}"
                 })
-                print(f"  [DEBUG] Kalshi usable: {len(result)}")
+        print(f"  [DEBUG] Kalshi usable: {len(result)}")
         return result
     except Exception as e:
         print(f"[Kalshi ERROR] {e}")
         return []
+
         
 
 def get_manifold():
