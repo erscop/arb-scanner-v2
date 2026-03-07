@@ -54,12 +54,13 @@ def get_polymarket():
 
 def get_kalshi():
     try:
-        r = requests.get(
-            "https://api.elections.kalshi.com/trade-api/v2/markets",
-            params={"status": "open", "limit": 500},
-            headers={"accept": "application/json"},
-            timeout=15
-        )
+       
+r = requests.get(
+    "https://trading-api.kalshi.com/trade-api/v2/markets", 
+    params={"status": "open", "limit": 500},
+    timeout=15
+)
+
         result = []
         for m in r.json().get("markets", []):
             ya     = m.get("yes_ask")
@@ -92,7 +93,7 @@ def get_manifold():
     try:
         r = requests.get(
             "https://api.manifold.markets/v0/markets",
-            params={"limit": 500, "sort": "createdTime", "order": "desc"},
+            params={"limit": 500, "sort": "liquidity", "order": "desc", "closed": "false"},
             timeout=15
         )
         data = r.json()
