@@ -54,18 +54,27 @@ def get_polymarket():
 
 def get_kalshi():
     try:
-        r = requests.get("https://api.elections.kalshi.com/trade-api/v2/markets",
-                         params={"status":"open","limit":500},
-                         headers={"accept":"application/json"}, timeout=15)
+        r = requests.get(
+            "https://api.elections.kalshi.com/trade-api/v2/markets",
+            params={"status": "open", "limit": 500},
+            headers={"accept": "application/json"},
+            timeout=15
+        )
         result = []
-        for m in r.json().get("markets",[]):
-            ya = m.get("yes_ask")
-            na = m.get("no_ask")
-            ticker = m.get("ticker","")
-            title  = m.get("title","")
-            # Escludi mercati multi-leg (parlay) — generano sempre falsi match
-            if "KXMVE" in ticker: continue
-            if title.count(",") >= 2: continue
+        for m in r.json().get("markets", []):
+            ya     = m.get("yes_ask")
+            na     = m.get("no_ask")
+            ticker = m.get("ticker", "")
+            title  = m.get("title", "")
+
+            # 🔴 filtro anti-falsi-positivi
+            # escludi mercati multi‑leg / cross‑category (i famosi KXMVECROSSCATEGORY)
+            if "KXMVECROSSCATEGORY" in ticker:
+                continue
+            # opzionale: escludi titoli con troppe virgole (liste di eventi)
+            if title.count(",") >= 2:
+                continue
+
             if ya is not None and na is not None and ya > 2 and na > 2:
                 result.append({
                     "source":  "kalshi",
@@ -73,12 +82,12 @@ def get_kalshi():
                     "clean":   clean(title),
                     "yes":     ya / 100,
                     "no":      na / 100,
-                    "url": f"https://kalshi.com/events/{m.get('event_ticker', m.get('ticker',''))}"
+                    "url":     f"https://kalshi.com/events/{m.get('event_ticker', ticker)}"
                 })
         return result
     except Exception as e:
-        print(f"[Kalshi ERROR] {e}"); return []
-        
+        print(f"[Kalshi ERROR] {e}")
+        return []        
 
 def get_manifold():
     try:
