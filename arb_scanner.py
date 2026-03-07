@@ -67,15 +67,12 @@ def get_kalshi():
             ticker = m.get("ticker", "")
             title  = m.get("title", "")
 
-            # 🔴 filtro anti-falsi-positivi
-            # escludi mercati multi‑leg / cross‑category (i famosi KXMVECROSSCATEGORY)
+            # escludi solo i multi‑leg / cross‑category che davano falsi positivi
             if "KXMVECROSSCATEGORY" in ticker:
                 continue
-            # opzionale: escludi titoli con troppe virgole (liste di eventi)
-            if title.count(",") >= 2:
-                continue
 
-            if ya is not None and na is not None and ya > 2 and na > 2:
+            # prezzi validi anche molto piccoli
+            if ya is not None and na is not None and ya > 0 and na > 0:
                 result.append({
                     "source":  "kalshi",
                     "title":   title,
@@ -87,38 +84,52 @@ def get_kalshi():
         return result
     except Exception as e:
         print(f"[Kalshi ERROR] {e}")
-        return []        
+        return []
+        
 
 def get_manifold():
     try:
-        r = requests.get("https://api.manifold.markets/v0/markets",
-                         params={"limit":500,"sort":"liquidity","order":"desc"},
-                         timeout=15)
+        r = requests.get(
+            "https://api.manifold.markets/v0/markets",
+            params={"limit": 500, "sort": "liquidity", "order": "desc"},
+            timeout=15
+        )
         data = r.json()
         if isinstance(data, dict):
             data = data.get("markets", data.get("data", []))
+
         result = []
         for m in data:
-            if not isinstance(m, dict): continue
-            if m.get("outcomeType") != "BINARY": continue
-            if m.get("isResolved", False): continue
+            if not isinstance(m, dict):
+                continue
+            if m.get("outcomeType") != "BINARY":
+                continue
+            if m.get("isResolved", False):
+                continue
+
             prob = m.get("probability")
-            if prob is None: continue
+            if prob is None:
+                continue
             try:
                 prob = float(prob)
-            except: continue
-            if 0.04 < prob < 0.96:
+            except:
+                continue
+
+            # filtro molto ampio: esclude solo estremi puri
+            if 0.01 < prob < 0.99:
                 result.append({
                     "source": "manifold",
-                    "title":  m.get("question",""),
-                    "clean":  clean(m.get("question","")),
+                    "title":  m.get("question", ""),
+                    "clean":  clean(m.get("question", "")),
                     "yes":    prob,
                     "no":     1 - prob,
-                    "url":    m.get("url","https://manifold.markets")
+                    "url":    m.get("url", "https://manifold.markets")
                 })
         return result
     except Exception as e:
-        print(f"[Manifold ERROR] {e}"); return []
+        print(f"[Manifold ERROR] {e}")
+        return []
+
 
 def build_vectorizer_and_vecs(market_list):
     vectorizer = TfidfVectorizer(
