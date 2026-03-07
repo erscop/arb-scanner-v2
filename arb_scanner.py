@@ -45,7 +45,7 @@ def get_polymarket():
                         "clean":     clean(m.get("question","")),
                         "yes":       yes, "no": no,
                         "liquidity": float(m.get("liquidity",0)),
-                        "url":       f"https://polymarket.com/event/{m.get('slug','')}"
+                        "url": f"https://polymarket.com/event/{m.get('slug') or m.get('id','')}"
                     })
             except: continue
         return result
@@ -73,7 +73,7 @@ def get_kalshi():
                     "clean":   clean(title),
                     "yes":     ya / 100,
                     "no":      na / 100,
-                    "url":     f"https://kalshi.com/markets/{ticker}"
+                    "url": f"https://kalshi.com/events/{m.get('event_ticker', m.get('ticker',''))}"
                 })
         return result
     except Exception as e:
