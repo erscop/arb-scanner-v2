@@ -7,7 +7,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 NTFY_TOPIC     = "arb_erscop_83041"
 MIN_ARB_EDGE   = 0.03
 MIN_EV_EDGE    = 0.08
-MIN_SIMILARITY = 0.55
+SIMILARITY_THRESHOLD = 0.55
 POLY_FEE       = 0.02
 KALSHI_FEE     = 0.02
 
