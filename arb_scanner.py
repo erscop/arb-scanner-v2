@@ -81,6 +81,7 @@ def get_kalshi():
                     "no":      na / 100,
                     "url":     f"https://kalshi.com/events/{m.get('event_ticker', ticker)}"
                 })
+                print(f"  [DEBUG] Kalshi usable: {len(result)}")
         return result
     except Exception as e:
         print(f"[Kalshi ERROR] {e}")
@@ -91,12 +92,14 @@ def get_manifold():
     try:
         r = requests.get(
             "https://api.manifold.markets/v0/markets",
-            params={"limit": 500, "sort": "liquidity", "order": "desc"},
+            params={"limit": 500, "sort": "createdTime", "order": "desc"},
             timeout=15
         )
         data = r.json()
         if isinstance(data, dict):
             data = data.get("markets", data.get("data", []))
+
+        print(f"  [DEBUG] Manifold raw items: {len(data)}")
 
         result = []
         for m in data:
@@ -115,8 +118,8 @@ def get_manifold():
             except:
                 continue
 
-            # filtro molto ampio: esclude solo estremi puri
-            if 0.01 < prob < 0.99:
+            # filtro super largo: solo 0 e 1 puri esclusi
+            if 0.0 < prob < 1.0:
                 result.append({
                     "source": "manifold",
                     "title":  m.get("question", ""),
@@ -125,10 +128,12 @@ def get_manifold():
                     "no":     1 - prob,
                     "url":    m.get("url", "https://manifold.markets")
                 })
+        print(f"  [DEBUG] Manifold usable: {len(result)}")
         return result
     except Exception as e:
         print(f"[Manifold ERROR] {e}")
         return []
+
 
 
 def build_vectorizer_and_vecs(market_list):
