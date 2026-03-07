@@ -7,7 +7,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 NTFY_TOPIC     = "arb_erscop_83041"
 MIN_ARB_EDGE   = 0.03
 MIN_EV_EDGE    = 0.08
-MIN_SIMILARITY = 0.20
+MIN_SIMILARITY = 0.40
 POLY_FEE       = 0.02
 KALSHI_FEE     = 0.02
 
@@ -61,18 +61,24 @@ def get_kalshi():
         for m in r.json().get("markets",[]):
             ya = m.get("yes_ask")
             na = m.get("no_ask")
+            ticker = m.get("ticker","")
+            title  = m.get("title","")
+            # Escludi mercati multi-leg (parlay) — generano sempre falsi match
+            if "KXMVE" in ticker: continue
+            if title.count(",") >= 2: continue
             if ya is not None and na is not None and ya > 2 and na > 2:
                 result.append({
                     "source":  "kalshi",
-                    "title":   m.get("title",""),
-                    "clean":   clean(m.get("title","")),
+                    "title":   title,
+                    "clean":   clean(title),
                     "yes":     ya / 100,
                     "no":      na / 100,
-                    "url":     f"https://kalshi.com/markets/{m.get('ticker','')}"
+                    "url":     f"https://kalshi.com/markets/{ticker}"
                 })
         return result
     except Exception as e:
         print(f"[Kalshi ERROR] {e}"); return []
+        
 
 def get_manifold():
     try:
