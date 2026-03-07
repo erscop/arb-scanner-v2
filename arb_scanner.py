@@ -66,12 +66,8 @@ def get_kalshi():
             na     = m.get("no_ask")
             ticker = m.get("ticker", "")
             title  = m.get("title", "")
-
-            # Escludi solo i multi-leg nel ticker
             if "KXMVECROSSCATEGORY" in ticker:
                 continue
-
-            # Prezzi validi anche piccoli
             if ya is not None and na is not None and ya > 0 and na > 0:
                 result.append({
                     "source":  "kalshi",
@@ -87,8 +83,6 @@ def get_kalshi():
         print(f"[Kalshi ERROR] {e}")
         return []
 
-        
-
 def get_manifold():
     try:
         r = requests.get(
@@ -99,9 +93,7 @@ def get_manifold():
         data = r.json()
         if isinstance(data, dict):
             data = data.get("markets", data.get("data", []))
-
         print(f"  [DEBUG] Manifold raw items: {len(data)}")
-
         result = []
         for m in data:
             if not isinstance(m, dict):
@@ -110,7 +102,6 @@ def get_manifold():
                 continue
             if m.get("isResolved", False):
                 continue
-
             prob = m.get("probability")
             if prob is None:
                 continue
@@ -118,8 +109,6 @@ def get_manifold():
                 prob = float(prob)
             except:
                 continue
-
-            # filtro super largo: solo 0 e 1 puri esclusi
             if 0.0 < prob < 1.0:
                 result.append({
                     "source": "manifold",
@@ -134,8 +123,6 @@ def get_manifold():
     except Exception as e:
         print(f"[Manifold ERROR] {e}")
         return []
-
-
 
 def build_vectorizer_and_vecs(market_list):
     vectorizer = TfidfVectorizer(
@@ -160,7 +147,7 @@ def find_arb(poly_list, kalshi_list):
     found, seen = [], set()
     for p in poly_list:
         k, score = best_match(p, kalshi_list, vec_k, vecs_k)
-        if score < MIN_SIMILARITY: continue
+        if score < SIMILARITY_THRESHOLD: continue
         key = p["title"][:40]
         if key in seen: continue
         seen.add(key)
@@ -190,7 +177,7 @@ def find_ev_signals(real_list, manifold_list, platform_name):
     signals, seen = [], set()
     for r in real_list:
         m, score = best_match(r, manifold_list, vec_m, vecs_m)
-        if score < MIN_SIMILARITY: continue
+        if score < SIMILARITY_THRESHOLD: continue
         key = r["title"][:40]
         if key in seen: continue
         seen.add(key)
