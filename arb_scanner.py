@@ -347,7 +347,7 @@ def find_correlated_pairs(markets):
                     continue
                 mj = mks[j]
                 diff = abs(mi["yes"] - mj["yes"])
-                if diff < 0.15:   # cerchiamo divergenze > 15 punti
+                if diff < 0.25:   # cerchiamo divergenze > 15 punti
                     continue
                 correlated.append({
                     "type":   "CORRELATED",
