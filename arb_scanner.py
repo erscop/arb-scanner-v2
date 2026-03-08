@@ -426,16 +426,9 @@ if __name__ == "__main__":
           f"Omen:{len(omen)} | Augur:{len(augur)} | Zeitgeist:{len(zeitgeist)} | "
           f"Manifold:{len(manifold)}")
 
-    # ARB cross-exchange principali (Polymarket vs PredictIt per ora)
     arbs_poly_pi = cross_exchange_arbs(poly, predictit, POLY_FEE, PREDICTIT_FEE)
-
-    # Ladder probability su ogni singolo exchange
     ladder_ops   = find_ladder_opportunities(all_markets)
-
-    # Coppie correlate sullo stesso exchange
     corr_pairs   = find_correlated_pairs(all_markets)
-
-    # EV vs Manifold
     ev_poly      = find_ev_signals(poly,      manifold, "Polymarket")
     ev_pi        = find_ev_signals(predictit, manifold, "PredictIt")
 
@@ -443,8 +436,19 @@ if __name__ == "__main__":
           f"LADDER:{len(ladder_ops)} | CORRELATED:{len(corr_pairs)} | "
           f"+EV Poly:{len(ev_poly)} | +EV PredictIt:{len(ev_pi)}")
 
-    # Notifiche ARB
-    for a in arbs_poly_pi:
+    # ---- LIMITI NOTIFICHE ----
+    MAX_CORRELATED = 5      # massimo 5 notifiche spread
+    MAX_LADDER     = 5
+    MAX_EV         = 5
+
+    # Ordina e taglia
+    arbs_poly_pi_sorted = sorted(arbs_poly_pi, key=lambda x: -x["edge"])
+    corr_pairs_sorted   = sorted(corr_pairs,   key=lambda x: -x["diff"])[:MAX_CORRELATED]
+    ladder_ops_sorted   = ladder_ops[:MAX_LADDER]
+    ev_all_sorted       = sorted(ev_poly + ev_pi, key=lambda x: -x["edge"])[:MAX_EV]
+
+    # --- ARB: li vogliamo tutti, ma di solito sono pochissimi ---
+    for a in arbs_poly_pi_sorted:
         msg = (f"{a['sA']}\n{a['sB']}\n"
                f"Costo: ${a['cost']} | Profitto: ${a['profit']} per $1\n"
                f"Similarity: {a['score']}\n"
@@ -452,8 +456,8 @@ if __name__ == "__main__":
                f"{a['url_a']}\n{a['url_b']}")
         send_ntfy(f"ARB +{a['edge']}% | {a['label']}", msg, priority="urgent")
 
-    # Notifiche ladder
-    for l in ladder_ops:
+    # --- LADDER: al massimo MAX_LADDER ---
+    for l in ladder_ops_sorted:
         msg = (f"Exchange: {l['source']}\n"
                f"Base: {l['base']}\n"
                f"Livello {l['level_1']} -> p={l['p1']:.2f}\n"
@@ -462,8 +466,8 @@ if __name__ == "__main__":
                f"{l['url_1']}\n{l['url_2']}")
         send_ntfy("LADDER anomaly", msg, priority="high")
 
-    # Notifiche correlati
-    for c in corr_pairs:
+    # --- CORRELATED: solo i top diff ---
+    for c in corr_pairs_sorted:
         msg = (f"Exchange: {c['source']}\n"
                f"Similarity: {c['score']}\n"
                f"Diff YES: {c['diff']}%\n"
@@ -472,8 +476,8 @@ if __name__ == "__main__":
                f"{c['url_a']}\n{c['url_b']}")
         send_ntfy("Correlated spread", msg, priority="default")
 
-    # Notifiche EV
-    for s in ev_poly + ev_pi:
+    # --- EV: top edge ---
+    for s in ev_all_sorted:
         msg = (f"Piattaforma: {s['platform']}\n"
                f"Direzione: {s['direction']}\n"
                f"Prezzo attuale: {s['real_prob']:.2f} | Stima Manifold: {s['mani_prob']:.2f}\n"
@@ -484,5 +488,5 @@ if __name__ == "__main__":
         send_ntfy(f"+EV {s['direction']} +{s['edge']}% su {s['platform']}",
                   msg, priority="high")
 
-    if not (arbs_poly_pi or ladder_ops or corr_pairs or ev_poly or ev_pi):
-        print("  → Nessuna opportunita trovata.")
+    if not (arbs_poly_pi_sorted or ladder_ops_sorted or corr_pairs_sorted or ev_all_sorted):
+        print("  → Nessuna opportunita inviata.")
