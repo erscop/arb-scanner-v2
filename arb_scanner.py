@@ -11,10 +11,11 @@ NTFY_TOPIC           = "arb_erscop_83041"
 MIN_ARB_EDGE         = 0.03   # 3% netto minimo per ARB cross-exchange
 MIN_EV_EDGE          = 0.08   # 8% divergenza contro oracle (Manifold)
 SIMILARITY_THRESHOLD = 0.55   # match testuale minimo
+
 POLY_FEE             = 0.02
-PREDICTIT_FEE        = 0.10   # trading fee + withdrawal ecc. (conservativo)
-GENERIC_FEE          = 0.03   # per mercati L1/L2 vari
-NET_FEE_CROSS        = POLY_FEE + GENERIC_FEE
+PREDICTIT_FEE        = 0.10   # fee effettiva (profit + withdrawal)
+GENERIC_FEE          = 0.03   # per Omen / altri L1
+NET_FEE_CROSS        = POLY_FEE + GENERIC_FEE  # fallback
 
 STOP_WORDS = [
     'will','the','a','an','be','is','are','was','were','in','on','at','to',
@@ -89,8 +90,7 @@ def get_polymarket():
 
 def get_predictit():
     """
-    Usa API pubblica PredictIt:
-    https://www.predictit.org/api/marketdata/all/ [web:170][web:174]
+    API pubblica PredictIt: https://www.predictit.org/api/marketdata/all/ [web:170][web:199]
     """
     try:
         r = requests.get(
@@ -103,7 +103,6 @@ def get_predictit():
             market_id = m.get("id")
             title = m.get("name", "")
             for c in m.get("contracts", []):
-                # Consideriamo solo contratti che hanno sia YES che NO quote
                 yes_price = c.get("bestBuyYesCost")
                 no_price  = c.get("bestBuyNoCost")
                 if yes_price is None or no_price is None:
@@ -115,7 +114,6 @@ def get_predictit():
                     continue
                 if yes <= 0 or no <= 0:
                     continue
-                # Normalizziamo da dollari a 0–1 (max 1.00)
                 if yes > 1.01 or no > 1.01:
                     yes = min(yes, 1.00)
                     no  = min(no, 1.00)
@@ -138,45 +136,88 @@ def get_predictit():
 
 def get_omen():
     """
-    Stub per Omen.
-    Da collegare a un subgraph / API custom (es. tooling Gnosis). [web:163]
+    Legge i mercati binari Omen dal subgraph Protofire. [web:201][web:232]
+    Usa outcomeTokenMarginalPrices come probabilità YES/NO.
     """
     try:
+        query = """
+        {
+          fixedProductMarketMakers(
+            where: { outcomeSlotCount: 2 }
+            first: 200
+            orderBy: scaledLiquidityMeasure
+            orderDirection: desc
+          ) {
+            id
+            title
+            outcomeTokenMarginalPrices
+            scaledLiquidityMeasure
+          }
+        }
+        """
+        r = requests.post(
+            "https://api.thegraph.com/subgraphs/name/protofire/omen-subgraph",
+            json={"query": query},
+            timeout=20
+        )
+        data = r.json().get("data", {}).get("fixedProductMarketMakers", [])
         result = []
-        # TODO: popola result con stessi campi di Polymarket/PredictIt
+
+        for m in data:
+            prices = m.get("outcomeTokenMarginalPrices") or []
+            if len(prices) != 2:
+                continue
+            try:
+                yes = float(prices[0])
+                no  = float(prices[1])
+            except:
+                continue
+
+            s = yes + no
+            if s <= 0:
+                continue
+            yes /= s
+            no  /= s
+
+            liq_raw = m.get("scaledLiquidityMeasure")
+            try:
+                liq = float(liq_raw) if liq_raw is not None else 0.0
+            except:
+                liq = 0.0
+
+            if liq < 100:
+                continue
+
+            title = m.get("title") or ""
+            result.append({
+                "source":    "omen",
+                "title":     title,
+                "clean":     clean(title),
+                "yes":       yes,
+                "no":        no,
+                "liquidity": liq,
+                "fee":       GENERIC_FEE,
+                "url":       f"https://omen.eth.limo/#/{m['id']}"
+            })
+
         print(f"  [DEBUG] Omen usable: {len(result)}")
         return result
+
     except Exception as e:
         print(f"[Omen ERROR] {e}")
         return []
 
-def get_augur():
-    """
-    Stub per Augur. Richiede accesso a nodo / subgraph Augur. [web:168]
-    """
-    try:
-        result = []
-        print(f"  [DEBUG] Augur usable: {len(result)}")
-        return result
-    except Exception as e:
-        print(f"[Augur ERROR] {e}")
-        return []
-
 def get_zeitgeist():
     """
-    Stub per Zeitgeist (Polkadot). Da collegare a RPC / indexer. [web:173][web:177]
+    Placeholder: Zeitgeist usa un SDK/indexer proprio (TypeScript). [web:275][web:276]
+    Qui ritorniamo 0 mercati finché non hai un endpoint HTTP/GraphQL concreto.
     """
-    try:
-        result = []
-        print(f"  [DEBUG] Zeitgeist usable: {len(result)}")
-        return result
-    except Exception as e:
-        print(f"[Zeitgeist ERROR] {e}")
-        return []
+    print("  [DEBUG] Zeitgeist usable: 0 (non configurato)")
+    return []
 
 def get_manifold():
     """
-    Manteniamo Manifold come 'oracle' per EV (non per esecuzione).
+    Manifold come oracle EV (v0 API). [web:200]
     """
     try:
         r = requests.get(
@@ -219,7 +260,7 @@ def get_manifold():
         print(f"[Manifold ERROR] {e}")
         return []
 
-# ------------- STRATEGIE: ARB, LADDER, CORRELATI -------------
+# ------------- STRATEGIE: ARB, LADDER, CORRELATI, EV -------------
 
 def cross_exchange_arbs(markets_a, markets_b, fee_a, fee_b):
     if not markets_a or not markets_b:
@@ -255,8 +296,8 @@ def cross_exchange_arbs(markets_a, markets_b, fee_a, fee_b):
                     "sA":    sA,
                     "sB":    sB,
                     "score": round(score, 3),
-                    "title_a": a["title"][:70],
-                    "title_b": b["title"][:70],
+                    "title_a": a["title"][:80],
+                    "title_b": b["title"][:80],
                     "url_a": a["url"],
                     "url_b": b["url"]
                 })
@@ -264,12 +305,9 @@ def cross_exchange_arbs(markets_a, markets_b, fee_a, fee_b):
 
 def find_ladder_opportunities(markets):
     """
-    Cerca 'ladder probability' su stesso exchange:
-    es. serie di mercati tipo 'BTC > 40k', 'BTC > 50k', 'BTC > 60k'
-    e segnala violazioni di monotonia P(>60k) <= P(>50k) <= P(>40k).
+    Ladder probability: verifica monotonia dei bracket su stesso exchange.
     """
     ladders = []
-    # Raggruppa per exchange
     by_source = {}
     for m in markets:
         by_source.setdefault(m["source"], []).append(m)
@@ -290,19 +328,15 @@ def find_ladder_opportunities(markets):
         for key, lst in buckets.items():
             if len(lst) < 2:
                 continue
-            # Ordina per livello
             lst.sort(key=lambda x: x[0])
-            levels  = [lv for lv, _ in lst]
             probs_y = [m["yes"] for _, m in lst]
 
-            # controlli di monotonia:
-            # per "over/above/greater than": prob deve DECREASE con il livello
             decreasing = key[2] in ["over", "above", "greater than"]
             violations = []
             for i in range(len(probs_y) - 1):
-                if decreasing and probs_y[i+1] > probs_y[i] + 0.02:
+                if decreasing and probs_y[i+1] > probs_y[i] + 0.03:
                     violations.append((lst[i], lst[i+1]))
-                if not decreasing and probs_y[i+1] < probs_y[i] - 0.02:
+                if not decreasing and probs_y[i+1] < probs_y[i] - 0.03:
                     violations.append((lst[i], lst[i+1]))
 
             for (lv1, m1), (lv2, m2) in violations:
@@ -323,8 +357,7 @@ def find_ladder_opportunities(markets):
 
 def find_correlated_pairs(markets):
     """
-    Usa similarity per trovare coppie sullo STESSO exchange
-    con score alto ma prezzi molto diversi (potenziali hedge / spread).
+    Coppie molto simili (testo) sullo stesso exchange ma con prezzi YES diversi.
     """
     if not markets:
         return []
@@ -347,7 +380,7 @@ def find_correlated_pairs(markets):
                     continue
                 mj = mks[j]
                 diff = abs(mi["yes"] - mj["yes"])
-                if diff < 0.25:   # cerchiamo divergenze > 15 punti
+                if diff < 0.30:   # solo divergenze >30 punti
                     continue
                 correlated.append({
                     "type":   "CORRELATED",
@@ -387,8 +420,8 @@ def find_ev_signals(real_list, manifold_list, platform_name):
                 "real_prob": r["yes"] if direction=="YES" else r["no"],
                 "mani_prob": m["yes"] if direction=="YES" else m["no"],
                 "score":     round(score,3),
-                "title_real": r["title"][:70],
-                "title_mani": m["title"][:70],
+                "title_real": r["title"][:80],
+                "title_mani": m["title"][:80],
                 "url_real":   r["url"],
                 "url_mani":   m["url"]
             })
@@ -416,39 +449,47 @@ if __name__ == "__main__":
     poly       = get_polymarket()
     predictit  = get_predictit()
     omen       = get_omen()
-    augur      = get_augur()
     zeitgeist  = get_zeitgeist()
     manifold   = get_manifold()
 
-    all_markets = poly + predictit + omen + augur + zeitgeist
+    all_markets = poly + predictit + omen + zeitgeist
 
     print(f"  → Poly:{len(poly)} | PredictIt:{len(predictit)} | "
-          f"Omen:{len(omen)} | Augur:{len(augur)} | Zeitgeist:{len(zeitgeist)} | "
+          f"Omen:{len(omen)} | Zeitgeist:{len(zeitgeist)} | "
           f"Manifold:{len(manifold)}")
 
-    arbs_poly_pi = cross_exchange_arbs(poly, predictit, POLY_FEE, PREDICTIT_FEE)
+    # ARB cross-exchange
+    arbs_poly_pi   = cross_exchange_arbs(poly,      predictit, POLY_FEE,      PREDICTIT_FEE)
+    arbs_poly_omen = cross_exchange_arbs(poly,      omen,      POLY_FEE,      GENERIC_FEE)
+    arbs_pi_omen   = cross_exchange_arbs(predictit, omen,      PREDICTIT_FEE, GENERIC_FEE)
+    all_arbs       = arbs_poly_pi + arbs_poly_omen + arbs_pi_omen
+
+    # Ladder / Correlated
     ladder_ops   = find_ladder_opportunities(all_markets)
     corr_pairs   = find_correlated_pairs(all_markets)
+
+    # EV
     ev_poly      = find_ev_signals(poly,      manifold, "Polymarket")
     ev_pi        = find_ev_signals(predictit, manifold, "PredictIt")
+    ev_omen      = find_ev_signals(omen,      manifold, "Omen")
+    ev_all       = ev_poly + ev_pi + ev_omen
 
-    print(f"  → ARB Poly-PredictIt:{len(arbs_poly_pi)} | "
-          f"LADDER:{len(ladder_ops)} | CORRELATED:{len(corr_pairs)} | "
-          f"+EV Poly:{len(ev_poly)} | +EV PredictIt:{len(ev_pi)}")
+    print(f"  → ARB total:{len(all_arbs)} | LADDER:{len(ladder_ops)} | "
+          f"CORRELATED:{len(corr_pairs)} | +EV total:{len(ev_all)}")
 
     # ---- LIMITI NOTIFICHE ----
-    MAX_CORRELATED = 5      # massimo 5 notifiche spread
-    MAX_LADDER     = 5
-    MAX_EV         = 5
+    MAX_CORRELATED = 1      # solo top 1 spread
+    MAX_LADDER     = 3
+    MAX_EV         = 3
 
     # Ordina e taglia
-    arbs_poly_pi_sorted = sorted(arbs_poly_pi, key=lambda x: -x["edge"])
-    corr_pairs_sorted   = sorted(corr_pairs,   key=lambda x: -x["diff"])[:MAX_CORRELATED]
-    ladder_ops_sorted   = ladder_ops[:MAX_LADDER]
-    ev_all_sorted       = sorted(ev_poly + ev_pi, key=lambda x: -x["edge"])[:MAX_EV]
+    arbs_sorted = sorted(all_arbs, key=lambda x: -x["edge"])
+    corr_sorted = sorted(corr_pairs, key=lambda x: -x["diff"])[:MAX_CORRELATED]
+    ladder_sorted = ladder_ops[:MAX_LADDER]
+    ev_sorted = sorted(ev_all, key=lambda x: -x["edge"])[:MAX_EV]
 
-    # --- ARB: li vogliamo tutti, ma di solito sono pochissimi ---
-    for a in arbs_poly_pi_sorted:
+    # --- ARB: li vogliamo tutti (di solito pochi) ---
+    for a in arbs_sorted:
         msg = (f"{a['sA']}\n{a['sB']}\n"
                f"Costo: ${a['cost']} | Profitto: ${a['profit']} per $1\n"
                f"Similarity: {a['score']}\n"
@@ -456,8 +497,8 @@ if __name__ == "__main__":
                f"{a['url_a']}\n{a['url_b']}")
         send_ntfy(f"ARB +{a['edge']}% | {a['label']}", msg, priority="urgent")
 
-    # --- LADDER: al massimo MAX_LADDER ---
-    for l in ladder_ops_sorted:
+    # --- LADDER: fino a MAX_LADDER ---
+    for l in ladder_sorted:
         msg = (f"Exchange: {l['source']}\n"
                f"Base: {l['base']}\n"
                f"Livello {l['level_1']} -> p={l['p1']:.2f}\n"
@@ -466,8 +507,8 @@ if __name__ == "__main__":
                f"{l['url_1']}\n{l['url_2']}")
         send_ntfy("LADDER anomaly", msg, priority="high")
 
-    # --- CORRELATED: solo i top diff ---
-    for c in corr_pairs_sorted:
+    # --- CORRELATED: solo TOP 1 ---
+    for c in corr_sorted:
         msg = (f"Exchange: {c['source']}\n"
                f"Similarity: {c['score']}\n"
                f"Diff YES: {c['diff']}%\n"
@@ -476,8 +517,8 @@ if __name__ == "__main__":
                f"{c['url_a']}\n{c['url_b']}")
         send_ntfy("Correlated spread", msg, priority="default")
 
-    # --- EV: top edge ---
-    for s in ev_all_sorted:
+    # --- EV: top MAX_EV ---
+    for s in ev_sorted:
         msg = (f"Piattaforma: {s['platform']}\n"
                f"Direzione: {s['direction']}\n"
                f"Prezzo attuale: {s['real_prob']:.2f} | Stima Manifold: {s['mani_prob']:.2f}\n"
@@ -488,5 +529,5 @@ if __name__ == "__main__":
         send_ntfy(f"+EV {s['direction']} +{s['edge']}% su {s['platform']}",
                   msg, priority="high")
 
-    if not (arbs_poly_pi_sorted or ladder_ops_sorted or corr_pairs_sorted or ev_all_sorted):
+    if not (arbs_sorted or ladder_sorted or corr_sorted or ev_sorted):
         print("  → Nessuna opportunita inviata.")
