@@ -293,3 +293,4 @@ def cross_exchange_arbs(markets_a, markets_b, fee_a, fee_b):
             continue
         seen.add(key)
         for label, cost, sA, sB in [
+            (f"YES {a['sour
