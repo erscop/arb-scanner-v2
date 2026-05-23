@@ -40,53 +40,50 @@ def best_match(src, tlist, vec, tvecs):
     j = int(np.argmax(sims))
     return tlist[j], float(sims[j])
 
-def get_kalshi():
+def get_polymarket():
     try:
         result = []
-        cursor = None
-        for _ in range(5):
-            params = {'limit': 200, 'status': 'open'}
-            if cursor:
-                params['cursor'] = cursor
+        seen = set()
+        for offset in [0, 200, 400]:
             r = requests.get(
-                'https://api.elections.kalshi.com/trade-api/v2/markets',
-                params=params, timeout=15
+                'https://gamma-api.polymarket.com/events',
+                params={'active':'true','closed':'false','limit':200,'offset':offset,'order':'id','ascending':'false'},
+                timeout=15
             )
-            data = r.json()
-            markets = data.get('markets', [])
-            if not markets:
+            events = r.json()
+            if not events:
                 break
-            for m in markets:
-                yr = m.get('yes_price')
-                if yr is None:
-                    continue
-                try:
-                    yes = float(yr) / 100.0
-                    no = round(1.0 - yes, 4)
-                except Exception:
-                    continue
-                if not (0.03 < yes < 0.97):
-                    continue
-                title = m.get('title', '')
-                ticker = m.get('ticker', '')
-                vol = float(m.get('volume', 0))
-                result.append({
-                    'source': 'kalshi',
-                    'title': title,
-                    'clean': clean(title),
-                    'yes': yes,
-                    'no': no,
-                    'liquidity': vol,
-                    'fee': KALSHI_FEE,
-                    'url': 'https://kalshi.com/markets/' + ticker.lower()
-                })
-            cursor = data.get('cursor')
-            if not cursor:
-                break
-        print('  [DEBUG] Kalshi usable: ' + str(len(result)))
+            for ev in events:
+                for m in ev.get('markets', []):
+                    mid = m.get('id')
+                    if mid in seen:
+                        continue
+                    seen.add(mid)
+                    try:
+                        prices = json.loads(m.get('outcomePrices', '[]'))
+                        if len(prices) < 2:
+                            continue
+                        yes = float(prices[0])
+                        no = float(prices[1])
+                        liq = float(m.get('liquidity', 0))
+                        if liq >= 50 and 0.03 < yes < 0.97:
+                            slug = ev.get('slug') or str(ev.get('id', ''))
+                            result.append({
+                                'source': 'polymarket',
+                                'title': m.get('question', ''),
+                                'clean': clean(m.get('question', '')),
+                                'yes': yes,
+                                'no': no,
+                                'liquidity': liq,
+                                'fee': POLY_FEE,
+                                'url': 'https://polymarket.com/event/' + slug
+                            })
+                    except Exception:
+                        continue
+        print('  [DEBUG] Poly usable: ' + str(len(result)))
         return result
     except Exception as e:
-        print('[Kalshi ERROR] ' + str(e))
+        print('[Polymarket ERROR] ' + str(e))
         return []
 
 def get_predictit():
@@ -137,7 +134,7 @@ def get_kalshi():
             if cursor:
                 params['cursor'] = cursor
             r = requests.get(
-                'https://external-api.kalshi.com/trade-api/v2/markets',
+                'https://api.elections.kalshi.com/trade-api/v2/markets',
                 params=params, timeout=15
             )
             data = r.json()
@@ -145,35 +142,26 @@ def get_kalshi():
             if not markets:
                 break
             for m in markets:
-                yes = None
-                for field in ['yes_ask', 'yes_bid', 'last_price', 'last_price_dollars']:
-                    raw = m.get(field)
-                    if raw is None:
-                        continue
-                    try:
-                        val = float(raw)
-                        if val > 1.0:
-                            val = val / 100.0
-                        if 0.03 < val < 0.97:
-                            yes = round(val, 4)
-                            break
-                    except Exception:
-                        continue
-                if yes is None:
+                yr = m.get('yes_price')
+                if yr is None:
                     continue
-                no = round(1.0 - yes, 4)
+                try:
+                    yes = float(yr) / 100.0
+                    no = round(1.0 - yes, 4)
+                except Exception:
+                    continue
+                if not (0.03 < yes < 0.97):
+                    continue
                 title = m.get('title', '')
                 ticker = m.get('ticker', '')
-                liq = float(m.get('liquidity_dollars', 0))
-                if liq < 10:
-                    continue
+                vol = float(m.get('volume', 0))
                 result.append({
                     'source': 'kalshi',
                     'title': title,
                     'clean': clean(title),
                     'yes': yes,
                     'no': no,
-                    'liquidity': liq,
+                    'liquidity': vol,
                     'fee': KALSHI_FEE,
                     'url': 'https://kalshi.com/markets/' + ticker.lower()
                 })
