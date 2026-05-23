@@ -141,9 +141,13 @@ def get_kalshi():
             markets = data.get('markets', [])
             if not markets:
                 break
+            if len(result) == 0:
+                print('  [DEBUG] Kalshi sample keys: ' + str(list(markets[0].keys())[:15]))
             for m in markets:
-                yr = m.get('yes_ask') or m.get('yes_bid')
-                nr = m.get('no_ask') or m.get('no_bid')
+                yr = (m.get('yes_ask') or m.get('yes_bid') or
+                      m.get('last_price') or m.get('yes_price'))
+                nr = (m.get('no_ask') or m.get('no_bid') or
+                      m.get('no_price'))
                 if yr is None or nr is None:
                     continue
                 try:
