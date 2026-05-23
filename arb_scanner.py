@@ -129,7 +129,7 @@ def get_kalshi():
     try:
         result = []
         cursor = None
-        for _ in range(3):
+        for _ in range(5):
             params = {'limit': 200, 'status': 'open'}
             if cursor:
                 params['cursor'] = cursor
@@ -142,19 +142,28 @@ def get_kalshi():
             if not markets:
                 break
             for m in markets:
-                yr = m.get('last_price_dollars')
-                if yr is None:
+                yes = None
+                for field in ['yes_ask', 'yes_bid', 'last_price', 'last_price_dollars']:
+                    raw = m.get(field)
+                    if raw is None:
+                        continue
+                    try:
+                        val = float(raw)
+                        if val > 1.0:
+                            val = val / 100.0
+                        if 0.03 < val < 0.97:
+                            yes = round(val, 4)
+                            break
+                    except Exception:
+                        continue
+                if yes is None:
                     continue
-                try:
-                    yes = float(yr)
-                    no = round(1.0 - yes, 4)
-                except Exception:
-                    continue
-                if not (0.03 < yes < 0.97):
-                    continue
+                no = round(1.0 - yes, 4)
                 title = m.get('title', '')
                 ticker = m.get('ticker', '')
                 liq = float(m.get('liquidity_dollars', 0))
+                if liq < 10:
+                    continue
                 result.append({
                     'source': 'kalshi',
                     'title': title,
