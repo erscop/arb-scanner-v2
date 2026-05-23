@@ -130,11 +130,11 @@ def get_kalshi():
         result = []
         cursor = None
         for _ in range(5):
-            params = {'limit': 200, 'status': 'open'}
+            params = {'limit': 1000, 'status': 'open', 'mve_filter': 'exclude'}
             if cursor:
                 params['cursor'] = cursor
             r = requests.get(
-                'https://api.elections.kalshi.com/trade-api/v2/markets',
+                'https://external-api.kalshi.com/trade-api/v2/markets',
                 params=params, timeout=15
             )
             data = r.json()
@@ -142,19 +142,29 @@ def get_kalshi():
             if not markets:
                 break
             for m in markets:
-                yr = m.get('yes_price')
-                if yr is None:
+                if m.get('market_type') != 'binary':
+                    continue
+                bid_raw = m.get('yes_bid_dollars')
+                ask_raw = m.get('yes_ask_dollars')
+                if bid_raw is None or ask_raw is None:
                     continue
                 try:
-                    yes = float(yr) / 100.0
+                    bid = float(bid_raw)
+                    ask = float(ask_raw)
+                    yes = (bid + ask) / 2.0
                     no = round(1.0 - yes, 4)
+                    yes = round(yes, 4)
                 except Exception:
                     continue
                 if not (0.03 < yes < 0.97):
                     continue
-                title = m.get('title', '')
+                title = m.get('yes_sub_title', '') or m.get('title', '')
+                event_ticker = m.get('event_ticker', '')
                 ticker = m.get('ticker', '')
-                vol = float(m.get('volume', 0))
+                try:
+                    vol = float(m.get('volume_fp', 0))
+                except Exception:
+                    vol = 0.0
                 result.append({
                     'source': 'kalshi',
                     'title': title,
@@ -163,7 +173,7 @@ def get_kalshi():
                     'no': no,
                     'liquidity': vol,
                     'fee': KALSHI_FEE,
-                    'url': 'https://kalshi.com/markets/' + ticker.lower()
+                    'url': 'https://kalshi.com/markets/' + event_ticker.lower()
                 })
             cursor = data.get('cursor')
             if not cursor:
@@ -173,7 +183,6 @@ def get_kalshi():
     except Exception as e:
         print('[Kalshi ERROR] ' + str(e))
         return []
-
 def get_zeitgeist():
     print('  [DEBUG] Zeitgeist usable: 0 (non configurato)')
     return []
