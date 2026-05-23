@@ -141,31 +141,27 @@ def get_kalshi():
             markets = data.get('markets', [])
             if not markets:
                 break
-            if len(result) == 0:
-                print('  [DEBUG] Kalshi sample keys: ' + str(list(markets[0].keys())[:15]))
             for m in markets:
-                yr = (m.get('yes_ask') or m.get('yes_bid') or
-                      m.get('last_price') or m.get('yes_price'))
-                nr = (m.get('no_ask') or m.get('no_bid') or
-                      m.get('no_price'))
-                if yr is None or nr is None:
+                yr = m.get('last_price_dollars')
+                if yr is None:
                     continue
                 try:
-                    yes = float(yr) / 100.0
-                    no = float(nr) / 100.0
+                    yes = float(yr)
+                    no = round(1.0 - yes, 4)
                 except Exception:
                     continue
                 if not (0.03 < yes < 0.97):
                     continue
                 title = m.get('title', '')
                 ticker = m.get('ticker', '')
+                liq = float(m.get('liquidity_dollars', 0))
                 result.append({
                     'source': 'kalshi',
                     'title': title,
                     'clean': clean(title),
                     'yes': yes,
                     'no': no,
-                    'liquidity': float(m.get('volume', 0)),
+                    'liquidity': liq,
                     'fee': KALSHI_FEE,
                     'url': 'https://kalshi.com/markets/' + ticker.lower()
                 })
