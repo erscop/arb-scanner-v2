@@ -5,13 +5,13 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 NTFY_TOPIC = 'arb_erscop_83041'
-MIN_ARB_EDGE = 0.06
-MIN_EV_EDGE = 0.12
-SIMILARITY_THRESHOLD = 0.70
+MIN_ARB_EDGE = 0.10
+MIN_EV_EDGE = 0.15
+SIMILARITY_THRESHOLD = 0.75
 POLY_FEE = 0.02
 PREDICTIT_FEE = 0.10
 KALSHI_FEE = 0.07
-KALSHI_MIN_VOLUME = 500
+KALSHI_MIN_VOLUME = 2000
 
 STOP_WORDS = [
     'will','the','a','an','be','is','are','was','were','in','on','at','to',
@@ -67,7 +67,7 @@ def get_polymarket():
                         yes = float(prices[0])
                         no = float(prices[1])
                         liq = float(m.get('liquidity', 0))
-                        if liq >= 50 and 0.03 < yes < 0.97:
+                        if liq >= 500 and 0.03 < yes < 0.97:
                             slug = ev.get('slug') or str(ev.get('id', ''))
                             result.append({
                                 'source': 'polymarket',
@@ -105,7 +105,7 @@ def get_predictit():
                     no = float(np_)
                 except Exception:
                     continue
-                if yes <= 0 or no <= 0:
+                if yes <= 0.05 or no <= 0.05:
                     continue
                 yes = min(yes, 1.0)
                 no = min(no, 1.0)
