@@ -5,12 +5,13 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 NTFY_TOPIC = 'arb_erscop_83041'
-MIN_ARB_EDGE = 0.03
-MIN_EV_EDGE = 0.08
-SIMILARITY_THRESHOLD = 0.55
+MIN_ARB_EDGE = 0.06
+MIN_EV_EDGE = 0.12
+SIMILARITY_THRESHOLD = 0.70
 POLY_FEE = 0.02
 PREDICTIT_FEE = 0.10
 KALSHI_FEE = 0.07
+KALSHI_MIN_VOLUME = 500
 
 STOP_WORDS = [
     'will','the','a','an','be','is','are','was','were','in','on','at','to',
@@ -151,20 +152,20 @@ def get_kalshi():
                 try:
                     bid = float(bid_raw)
                     ask = float(ask_raw)
-                    yes = (bid + ask) / 2.0
+                    yes = round((bid + ask) / 2.0, 4)
                     no = round(1.0 - yes, 4)
-                    yes = round(yes, 4)
                 except Exception:
                     continue
                 if not (0.03 < yes < 0.97):
                     continue
-                title = m.get('yes_sub_title', '') or m.get('title', '')
-                event_ticker = m.get('event_ticker', '')
-                ticker = m.get('ticker', '')
                 try:
                     vol = float(m.get('volume_fp', 0))
                 except Exception:
                     vol = 0.0
+                if vol < KALSHI_MIN_VOLUME:
+                    continue
+                title = m.get('yes_sub_title', '') or m.get('title', '')
+                event_ticker = m.get('event_ticker', '')
                 result.append({
                     'source': 'kalshi',
                     'title': title,
@@ -183,6 +184,7 @@ def get_kalshi():
     except Exception as e:
         print('[Kalshi ERROR] ' + str(e))
         return []
+
 def get_zeitgeist():
     print('  [DEBUG] Zeitgeist usable: 0 (non configurato)')
     return []
@@ -398,10 +400,10 @@ if __name__ == '__main__':
     ev_all     = ev_poly + ev_pi + ev_kalshi
     print('  -> ARB total:' + str(len(all_arbs)) + ' | LADDER:' + str(len(ladder_ops)) +
           ' | CORRELATED:' + str(len(corr_pairs)) + ' | +EV total:' + str(len(ev_all)))
-    arbs_sorted   = sorted(all_arbs,   key=lambda x: -x['edge'])
+    arbs_sorted   = sorted(all_arbs,   key=lambda x: -x['edge'])[:3]
     corr_sorted   = sorted(corr_pairs, key=lambda x: -x['diff'])[:1]
-    ladder_sorted = ladder_ops[:3]
-    ev_sorted     = sorted(ev_all,     key=lambda x: -x['edge'])[:3]
+    ladder_sorted = ladder_ops[:1]
+    ev_sorted     = sorted(ev_all,     key=lambda x: -x['edge'])[:1]
     for a in arbs_sorted:
         msg = (a['sA'] + chr(10) + a['sB'] + chr(10) +
                'Costo: $' + str(a['cost']) + ' | Profitto: $' + str(a['profit']) + ' per $1' + chr(10) +
