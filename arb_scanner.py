@@ -1,5 +1,5 @@
-import requests, json, re
-from datetime import datetime
+import requests, json, re, hashlib, os
+from datetime import datetime, timezone
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -12,6 +12,8 @@ POLY_FEE = 0.02
 PREDICTIT_FEE = 0.10
 KALSHI_FEE = 0.07
 KALSHI_MIN_VOLUME = 2000
+SEEN_FILE = 'seen_alerts.json'
+COOLDOWN_HOURS = 4
 
 STOP_WORDS = [
     'will','the','a','an','be','is','are','was','were','in','on','at','to',
@@ -23,6 +25,31 @@ STOP_WORDS = [
     'could','should','may','might','get','make','take','least','most',
     'new','old','big','high','low','win','lose','pass','fail','hit','about'
 ]
+
+def load_seen():
+    if os.path.exists(SEEN_FILE):
+        try:
+            return json.load(open(SEEN_FILE))
+        except Exception:
+            return {}
+    return {}
+
+def save_seen(seen):
+    json.dump(seen, open(SEEN_FILE, 'w'))
+
+def make_key(tipo, label, title_a, title_b=''):
+    raw = f"{tipo}|{label}|{title_a[:60]}|{title_b[:60]}"
+    return hashlib.md5(raw.encode()).hexdigest()
+
+def already_seen(seen, key):
+    if key not in seen:
+        return False
+    last = datetime.fromisoformat(seen[key])
+    elapsed = (datetime.now(timezone.utc) - last).total_seconds()
+    return elapsed < COOLDOWN_HOURS * 3600
+
+def mark_seen(seen, key):
+    seen[key] = datetime.now(timezone.utc).isoformat()
 
 def clean(text):
     text = text.lower()
@@ -73,9 +100,7 @@ def get_polymarket():
                                 'source': 'polymarket',
                                 'title': m.get('question', ''),
                                 'clean': clean(m.get('question', '')),
-                                'yes': yes,
-                                'no': no,
-                                'liquidity': liq,
+                                'yes': yes, 'no': no, 'liquidity': liq,
                                 'fee': POLY_FEE,
                                 'url': 'https://polymarket.com/event/' + slug
                             })
@@ -114,8 +139,7 @@ def get_predictit():
                     'source': 'predictit',
                     'title': ft,
                     'clean': clean(ft),
-                    'yes': yes,
-                    'no': no,
+                    'yes': yes, 'no': no,
                     'liquidity': float(c.get('sharesTraded', 0)),
                     'fee': PREDICTIT_FEE,
                     'url': 'https://www.predictit.org/markets/detail/' + str(mid)
@@ -170,9 +194,7 @@ def get_kalshi():
                     'source': 'kalshi',
                     'title': title,
                     'clean': clean(title),
-                    'yes': yes,
-                    'no': no,
-                    'liquidity': vol,
+                    'yes': yes, 'no': no, 'liquidity': vol,
                     'fee': KALSHI_FEE,
                     'url': 'https://kalshi.com/markets/' + event_ticker.lower()
                 })
@@ -222,8 +244,7 @@ def get_manifold():
                     'source': 'manifold',
                     'title': m.get('question', ''),
                     'clean': clean(m.get('question', '')),
-                    'yes': prob,
-                    'no': 1 - prob,
+                    'yes': prob, 'no': 1 - prob,
                     'url': m.get('url', 'https://manifold.markets')
                 })
         print('  [DEBUG] Manifold usable: ' + str(len(result)))
@@ -379,64 +400,105 @@ def send_ntfy(title, message, priority='default'):
 
 if __name__ == '__main__':
     print('[' + datetime.utcnow().strftime('%H:%M:%S') + ' UTC] Scansione in corso...')
+
+    seen = load_seen()
+
     poly      = get_polymarket()
     predictit = get_predictit()
     kalshi    = get_kalshi()
     zeitgeist = get_zeitgeist()
     manifold  = get_manifold()
     all_markets = poly + predictit + kalshi + zeitgeist
+
     print('  -> Poly:' + str(len(poly)) + ' | PredictIt:' + str(len(predictit)) +
           ' | Kalshi:' + str(len(kalshi)) + ' | Zeitgeist:' + str(len(zeitgeist)) +
           ' | Manifold:' + str(len(manifold)))
+
     arbs_poly_pi     = cross_exchange_arbs(poly,      predictit, POLY_FEE,      PREDICTIT_FEE)
     arbs_poly_kalshi = cross_exchange_arbs(poly,      kalshi,    POLY_FEE,      KALSHI_FEE)
     arbs_pi_kalshi   = cross_exchange_arbs(predictit, kalshi,    PREDICTIT_FEE, KALSHI_FEE)
     all_arbs         = arbs_poly_pi + arbs_poly_kalshi + arbs_pi_kalshi
+
     ladder_ops = find_ladder_opportunities(all_markets)
     corr_pairs = find_correlated_pairs(all_markets)
     ev_poly    = find_ev_signals(poly,      manifold, 'Polymarket')
     ev_pi      = find_ev_signals(predictit, manifold, 'PredictIt')
     ev_kalshi  = find_ev_signals(kalshi,    manifold, 'Kalshi')
     ev_all     = ev_poly + ev_pi + ev_kalshi
+
     print('  -> ARB total:' + str(len(all_arbs)) + ' | LADDER:' + str(len(ladder_ops)) +
           ' | CORRELATED:' + str(len(corr_pairs)) + ' | +EV total:' + str(len(ev_all)))
+
     arbs_sorted   = sorted(all_arbs,   key=lambda x: -x['edge'])[:3]
     corr_sorted   = sorted(corr_pairs, key=lambda x: -x['diff'])[:1]
     ladder_sorted = ladder_ops[:1]
     ev_sorted     = sorted(ev_all,     key=lambda x: -x['edge'])[:1]
+
+    sent = 0
+
     for a in arbs_sorted:
-        msg = (a['sA'] + chr(10) + a['sB'] + chr(10) +
-               'Costo: $' + str(a['cost']) + ' | Profitto: $' + str(a['profit']) + ' per $1' + chr(10) +
-               'Similarity: ' + str(a['score']) + chr(10) +
-               a['title_a'] + chr(10) + a['title_b'] + chr(10) +
-               a['url_a'] + chr(10) + a['url_b'])
+        k = make_key('ARB', a['label'], a['title_a'], a['title_b'])
+        if already_seen(seen, k):
+            print('  -> [SKIP dedup] ARB ' + a['label'])
+            continue
+        msg = (a['sA'] + '\n' + a['sB'] + '\n' +
+               'Costo: $' + str(a['cost']) + ' | Profitto: $' + str(a['profit']) + ' per $1\n' +
+               'Similarity: ' + str(a['score']) + '\n' +
+               a['title_a'] + '\n' + a['title_b'] + '\n' +
+               a['url_a'] + '\n' + a['url_b'])
         send_ntfy('ARB +' + str(a['edge']) + '% | ' + a['label'], msg, priority='urgent')
+        mark_seen(seen, k)
+        sent += 1
+
     for l in ladder_sorted:
-        msg = ('Exchange: ' + l['source'] + chr(10) +
-               'Base: ' + l['base'] + chr(10) +
-               'Livello ' + str(l['level_1']) + ' -> p=' + str(round(l['p1'],2)) + chr(10) +
-               'Livello ' + str(l['level_2']) + ' -> p=' + str(round(l['p2'],2)) + chr(10) +
-               l['title_1'] + chr(10) + l['title_2'] + chr(10) +
-               l['url_1'] + chr(10) + l['url_2'])
+        k = make_key('LADDER', l['source'], l['title_1'], l['title_2'])
+        if already_seen(seen, k):
+            print('  -> [SKIP dedup] LADDER ' + l['base'])
+            continue
+        msg = ('Exchange: ' + l['source'] + '\n' +
+               'Base: ' + l['base'] + '\n' +
+               'Livello ' + str(l['level_1']) + ' -> p=' + str(round(l['p1'],2)) + '\n' +
+               'Livello ' + str(l['level_2']) + ' -> p=' + str(round(l['p2'],2)) + '\n' +
+               l['title_1'] + '\n' + l['title_2'] + '\n' +
+               l['url_1'] + '\n' + l['url_2'])
         send_ntfy('LADDER anomaly', msg, priority='high')
+        mark_seen(seen, k)
+        sent += 1
+
     for c in corr_sorted:
-        msg = ('Exchange: ' + c['source'] + chr(10) +
-               'Similarity: ' + str(c['score']) + chr(10) +
-               'Diff YES: ' + str(c['diff']) + '%' + chr(10) +
-               c['title_a'] + ' (p_yes=' + str(round(c['p_yes_a'],2)) + ')' + chr(10) +
-               c['title_b'] + ' (p_yes=' + str(round(c['p_yes_b'],2)) + ')' + chr(10) +
-               c['url_a'] + chr(10) + c['url_b'])
+        k = make_key('CORRELATED', c['source'], c['title_a'], c['title_b'])
+        if already_seen(seen, k):
+            print('  -> [SKIP dedup] CORRELATED ' + c['title_a'][:40])
+            continue
+        msg = ('Exchange: ' + c['source'] + '\n' +
+               'Similarity: ' + str(c['score']) + '\n' +
+               'Diff YES: ' + str(c['diff']) + '%\n' +
+               c['title_a'] + ' (p_yes=' + str(round(c['p_yes_a'],2)) + ')\n' +
+               c['title_b'] + ' (p_yes=' + str(round(c['p_yes_b'],2)) + ')\n' +
+               c['url_a'] + '\n' + c['url_b'])
         send_ntfy('Correlated spread', msg, priority='default')
+        mark_seen(seen, k)
+        sent += 1
+
     for s in ev_sorted:
-        msg = ('Piattaforma: ' + s['platform'] + chr(10) +
-               'Direzione: ' + s['direction'] + chr(10) +
+        k = make_key('+EV', s['platform'] + s['direction'], s['title_real'], s['title_mani'])
+        if already_seen(seen, k):
+            print('  -> [SKIP dedup] +EV ' + s['title_real'][:40])
+            continue
+        msg = ('Piattaforma: ' + s['platform'] + '\n' +
+               'Direzione: ' + s['direction'] + '\n' +
                'Prezzo attuale: ' + str(round(s['real_prob'],2)) +
-               ' | Stima Manifold: ' + str(round(s['mani_prob'],2)) + chr(10) +
-               'Divergenza: +' + str(s['edge']) + '%' + chr(10) +
-               'Mercato: ' + s['title_real'] + chr(10) +
-               'Manifold: ' + s['title_mani'] + chr(10) +
-               s['url_real'] + chr(10) + s['url_mani'])
+               ' | Stima Manifold: ' + str(round(s['mani_prob'],2)) + '\n' +
+               'Divergenza: +' + str(s['edge']) + '%\n' +
+               'Mercato: ' + s['title_real'] + '\n' +
+               'Manifold: ' + s['title_mani'] + '\n' +
+               s['url_real'] + '\n' + s['url_mani'])
         send_ntfy('+EV ' + s['direction'] + ' +' + str(s['edge']) + '% su ' + s['platform'],
                   msg, priority='high')
-    if not (arbs_sorted or ladder_sorted or corr_sorted or ev_sorted):
-        print('  -> Nessuna opportunita inviata.')
+        mark_seen(seen, k)
+        sent += 1
+
+    save_seen(seen)
+    print('  -> Notifiche inviate questo run: ' + str(sent))
+    if sent == 0:
+        print('  -> Nessuna nuova opportunita (tutto gia notificato o sotto soglia).')
