@@ -1,36 +1,37 @@
-name: Arb Scanner
+name: ARB Scanner
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/15 * * * *'   # ogni 15 minuti — cambia qui la frequenza
+  workflow_dispatch:           # permette run manuale dal tab Actions
+
+permissions:
+  contents: write              # necessario per il commit del log CSV
 
 jobs:
   scan:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      - name: Restore dedup cache
-        uses: actions/cache@v4
-        with:
-          path: seen_alerts.json
-          key: seen-alerts-${{ github.run_id }}
-          restore-keys: |
-            seen-alerts-
-
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
-      - run: pip install -r requirements.txt
+      - name: Installa dipendenze
+        run: pip install requests numpy scikit-learn
 
-      - run: python arb_scanner.py
+      - name: Esegui scanner
+        run: python arb_scanner.py   # ← cambia se il file si chiama diversamente
 
-      - name: Save dedup cache
+      - name: Commit log e cache
         if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: seen_alerts.json
-          key: seen-alerts-${{ github.run_id }}
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name  "GitHub Actions"
+          git add signals_log.csv seen_alerts.json || true
+          git diff --staged --quiet || git commit -m "log: $(date -u +%Y%m%dT%H%M%SZ) [skip ci]"
+          git push
