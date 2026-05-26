@@ -38,7 +38,11 @@ KALSHI_CATEGORY_MAP = {
     'kxlowt'    : 'weather',
     'kxprecip'  : 'weather',
     'kxtruev'   : 'politics',
-    'kxaaagasd' : 'politics',
+    'kxmaddow'  : 'media',
+    'kxtrump'   : 'media',
+    'kxbiden'   : 'media',
+    'kxfox'     : 'media',
+    'kxcnn'     : 'media',
 }
 
 STOP_WORDS = [
@@ -52,7 +56,7 @@ STOP_WORDS = [
     'new','old','big','high','low','win','lose','pass','fail','hit','about'
 ]
 
-# ─── CATEGORY FILTER ─────────────────────────────────────────────────────────
+# ─── CATEGORY FILTER ──────────────────────────────────────────────────────────
 def get_market_category(url: str, title: str = '') -> str:
     url_l   = url.lower()
     title_l = title.lower()
@@ -66,19 +70,37 @@ def get_market_category(url: str, title: str = '') -> str:
     if any(k in combined for k in ['bitcoin','btc','eth','crypto','price','dollar','usd']):
         return 'crypto'
     if any(k in combined for k in ['election','senate','house','mayor','party','democrat',
-                                   'republican','vote','congress','president','governor']):
+                                   'republican','vote','congress','president','governor',
+                                   'redistrict','district']):
         return 'politics'
     if any(k in combined for k in ['temperature','rain','weather','humid','forecast',
                                    'celsius','fahrenheit','highs','lows']):
         return 'weather'
     if any(k in combined for k in ['wta','atp','tennis','soccer','nba','nfl','mlb',
-                                   'nhl','run','score','match','game','league','player']):
+                                   'nhl','runs','scored','score','match','game',
+                                   'league','player']):
         return 'sports'
+    if any(k in combined for k in ['mention','mentioned','maddow','fox news','cnn',
+                                   'msnbc','broadcast','interview','appearance']):
+        return 'media'
     return 'unknown'
 
 def categories_compatible(cat_a: str, cat_b: str) -> bool:
+    INCOMPATIBLE = {
+        ('politics', 'media'),   ('media', 'politics'),
+        ('sports',   'media'),   ('media', 'sports'),
+        ('sports',   'politics'),('politics', 'sports'),
+        ('sports',   'crypto'),  ('crypto', 'sports'),
+        ('crypto',   'media'),   ('media', 'crypto'),
+        ('weather',  'politics'),('politics', 'weather'),
+        ('weather',  'sports'),  ('sports', 'weather'),
+        ('weather',  'crypto'),  ('crypto', 'weather'),
+        ('weather',  'media'),   ('media', 'weather'),
+    }
     if 'unknown' in (cat_a, cat_b):
         return True
+    if (cat_a, cat_b) in INCOMPATIBLE:
+        return False
     return cat_a == cat_b
 
 # ─── DEDUP / SEEN ─────────────────────────────────────────────────────────────
@@ -396,7 +418,8 @@ def find_ladder_opportunities(markets):
     by_source = {}
     for m in markets:
         by_source.setdefault(m['source'], []).append(m)
-    pattern = re.compile(r'(over|under|above|below|greater than|less than)\s+(\d+\.?\d*)')
+
+    pattern     = re.compile(r'(over|under|above|below|greater than|less than)\s+(\d+\.?\d*)')
     for src, mks in by_source.items():
         buckets = {}
         for m in mks:
@@ -406,8 +429,11 @@ def find_ladder_opportunities(markets):
             direction = match.group(1)
             level     = float(match.group(2))
             base      = pattern.sub('', m['title'].lower())
-            key       = (src, clean(base).strip(), direction)
+            # Ultimi 12 char del ticker per separare partite diverse stesso giorno
+            url_tail  = m['url'].rstrip('/').split('/')[-1][-12:]
+            key       = (src, clean(base).strip(), direction, url_tail)
             buckets.setdefault(key, []).append((level, m))
+
         for key, lst in buckets.items():
             if len(lst) < 2:
                 continue
