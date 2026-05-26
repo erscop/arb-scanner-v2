@@ -1,12 +1,10 @@
 name: ARB Scanner
 
 on:
-  schedule:
-    - cron: '*/15 * * * *'   # ogni 15 minuti — cambia qui la frequenza
-  workflow_dispatch:           # permette run manuale dal tab Actions
+  workflow_dispatch:
 
 permissions:
-  contents: write              # necessario per il commit del log CSV
+  contents: write
 
 jobs:
   scan:
@@ -25,7 +23,7 @@ jobs:
         run: pip install requests numpy scikit-learn
 
       - name: Esegui scanner
-        run: python arb_scanner.py   # ← cambia se il file si chiama diversamente
+        run: python arb_scanner.py
 
       - name: Commit log e cache
         if: always()
