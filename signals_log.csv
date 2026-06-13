@@ -2768,3 +2768,4 @@ timestamp_utc,signal_type,edge_pct,similarity,platform_a,platform_b,category_a,c
 2026-06-13T11:31:11.169625+00:00,CORRELATED,0.85,1.0,kalshi,kalshi,unknown,unknown,86° or above,86° or above,https://kalshi.com/markets/kxlowtphx-26jun13,https://kalshi.com/markets/kxhightsea-26jun13,0.0,False,cooldown
 2026-06-13T11:45:59.287170+00:00,CORRELATED,0.85,1.0,kalshi,kalshi,unknown,unknown,86° or above,86° or above,https://kalshi.com/markets/kxlowtphx-26jun13,https://kalshi.com/markets/kxhightsea-26jun13,0.0,False,cooldown
 2026-06-13T12:01:18.741828+00:00,CORRELATED,0.88,1.0,kalshi,kalshi,unknown,unknown,82° or above,82° or above,https://kalshi.com/markets/kxlowtlv-26jun13,https://kalshi.com/markets/kxhightsfo-26jun13,0.0,True,
+2026-06-13T12:16:00.791200+00:00,CORRELATED,0.92,1.0,kalshi,kalshi,unknown,unknown,82° or above,82° or above,https://kalshi.com/markets/kxlowtlv-26jun13,https://kalshi.com/markets/kxhightsfo-26jun13,0.0,False,cooldown
