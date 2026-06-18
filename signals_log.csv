@@ -3422,3 +3422,4 @@ timestamp_utc,signal_type,edge_pct,similarity,platform_a,platform_b,category_a,c
 2026-06-18T02:01:41.205889+00:00,CORRELATED,0.855,1.0,kalshi,kalshi,unknown,unknown,Paul Goldschmidt: 2+,Paul Goldschmidt: 2+,https://kalshi.com/markets/kxmlbhit-26jun171905cwsnyy,https://kalshi.com/markets/kxmlbhr-26jun171905cwsnyy,0.0,True,
 2026-06-18T02:15:54.997215+00:00,LADDER,0.095,1.0,kalshi,kalshi,unknown,unknown,Over 15.5 runs scored,Over 16.5 runs scored,https://kalshi.com/markets/kxmlbtotal-26jun172005colchc,https://kalshi.com/markets/kxmlbtotal-26jun172005colchc,0.0,True,
 2026-06-18T02:15:55.047172+00:00,CORRELATED,0.85,1.0,kalshi,kalshi,unknown,unknown,Above 91,91° or above,https://kalshi.com/markets/kxrt-toy,https://kalshi.com/markets/kxhighny-26jun18,0.0,True,
+2026-06-18T02:31:04.542225+00:00,CORRELATED,0.84,1.0,kalshi,kalshi,unknown,unknown,Above 91,91° or above,https://kalshi.com/markets/kxrt-toy,https://kalshi.com/markets/kxhighny-26jun18,0.0,False,cooldown
