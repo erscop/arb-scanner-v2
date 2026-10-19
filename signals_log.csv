@@ -19088,3 +19088,5 @@ timestamp_utc,signal_type,edge_pct,similarity,platform_a,platform_b,category_a,c
 2026-10-19T17:01:23.996609+00:00,CORRELATED,0.88,1.0,kalshi,kalshi,unknown,unknown,Above 4.3200,Above 4.3200,https://kalshi.com/markets/kxaaagasw-26oct26,https://kalshi.com/markets/kxaaagasdme-26oct20,0.0,True,
 2026-10-19T17:15:50.057474+00:00,LADDER,0.12,1.0,kalshi,kalshi,unknown,unknown,Above 6.1650,Above 6.1950,https://kalshi.com/markets/kxaaagasdca-26oct20,https://kalshi.com/markets/kxaaagasdca-26oct20,0.0,False,cooldown
 2026-10-19T17:15:50.057560+00:00,CORRELATED,0.88,1.0,kalshi,kalshi,unknown,unknown,Above 4.3200,Above 4.3200,https://kalshi.com/markets/kxaaagasw-26oct26,https://kalshi.com/markets/kxaaagasdme-26oct20,0.0,False,cooldown
+2026-10-19T17:31:17.543336+00:00,LADDER,0.08,1.0,kalshi,kalshi,unknown,unknown,Above 6.1650,Above 6.1950,https://kalshi.com/markets/kxaaagasdca-26oct20,https://kalshi.com/markets/kxaaagasdca-26oct20,0.0,False,cooldown
+2026-10-19T17:31:17.543444+00:00,CORRELATED,0.88,1.0,kalshi,kalshi,unknown,unknown,Above 4.3200,Above 4.3200,https://kalshi.com/markets/kxaaagasw-26oct26,https://kalshi.com/markets/kxaaagasdme-26oct20,0.0,False,cooldown
